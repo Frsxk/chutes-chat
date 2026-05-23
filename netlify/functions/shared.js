@@ -55,16 +55,30 @@ function normalizeModelId(id = "") {
 }
 
 function getApiKey(headers = {}) {
-  const localKey =
-    headers["x-user-chutes-key"] ||
-    headers["X-User-Chutes-Key"] ||
-    headers["x-chutes-api-key"] ||
-    headers["X-Chutes-API-Key"] ||
-    headers["x-api-key"] ||
-    headers["X-API-Key"];
+  let localKey = "";
+  if (headers && typeof headers.get === "function") {
+    localKey =
+      headers.get("x-user-chutes-key") ||
+      headers.get("X-User-Chutes-Key") ||
+      headers.get("x-chutes-api-key") ||
+      headers.get("X-Chutes-API-Key") ||
+      headers.get("x-api-key") ||
+      headers.get("X-API-Key") ||
+      "";
+  } else if (headers) {
+    localKey =
+      headers["x-user-chutes-key"] ||
+      headers["X-User-Chutes-Key"] ||
+      headers["x-chutes-api-key"] ||
+      headers["X-Chutes-API-Key"] ||
+      headers["x-api-key"] ||
+      headers["X-API-Key"] ||
+      "";
+  }
 
   return process.env.CHUTES_API_KEY || process.env.OPENAI_API_KEY || localKey || "";
 }
+
 
 function headersForChutes(apiKey) {
   return {

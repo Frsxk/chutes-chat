@@ -1,18 +1,38 @@
+import shared from "./shared.js";
+
 const {
   CHUTES_BASE_URL,
   FALLBACK_MODELS,
-  json,
   getApiKey,
   headersForChutes,
   sortAndNormalizeModels
-} = require("./shared");
+} = shared;
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== "GET") {
+function json(status, body) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
+    }
+  });
+}
+
+function getHeaderObject(request) {
+  const headers = {};
+  request.headers.forEach((value, key) => {
+    headers[key] = value;
+    headers[key.toLowerCase()] = value;
+  });
+  return headers;
+}
+
+export default async function handler(request) {
+  if (request.method !== "GET") {
     return json(405, { error: "Method not allowed" });
   }
 
-  const apiKey = getApiKey(event.headers || {});
+  const apiKey = getApiKey(getHeaderObject(request));
 
   try {
     const response = await fetch(`${CHUTES_BASE_URL}/models`, {
@@ -48,4 +68,4 @@ exports.handler = async (event) => {
       models
     });
   }
-};
+}
