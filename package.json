@@ -1,0 +1,16 @@
+{
+  "name": "chutes-chat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Netlify-ready ChatGPT-like web app routed to the Chutes OpenAI-compatible API.",
+  "scripts": {
+    "build": "node -e \"console.log('Static app: no build step required. Publish public/ and deploy Netlify functions.')\"",
+    "start": "netlify dev"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "netlify-cli": "latest"
+  }
+}

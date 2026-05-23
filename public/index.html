@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A ChatGPT-like web app powered by the Chutes OpenAI-compatible API." />
+    <title>Chutes Chat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-row">
+          <div class="brand-mark">C</div>
+          <div>
+            <h1>Chutes Chat</h1>
+            <p>OpenAI-compatible via Chutes</p>
+          </div>
+        </div>
+
+        <button class="primary-btn full" id="new-chat-btn" type="button">New chat</button>
+
+        <div class="sidebar-section">
+          <div class="section-title">Saved chats</div>
+          <div id="thread-list" class="thread-list" aria-label="Saved chats"></div>
+        </div>
+
+        <div class="sidebar-actions">
+          <button class="ghost-btn" id="export-btn" type="button">Export</button>
+          <label class="ghost-btn file-label" for="import-file">Import</label>
+          <input id="import-file" type="file" accept="application/json" hidden />
+          <button class="danger-btn" id="clear-btn" type="button">Clear</button>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <button class="icon-btn mobile-only" id="sidebar-toggle" type="button" aria-label="Toggle chats">☰</button>
+          <div class="agent-picker-wrap">
+            <label for="model-select">Agent</label>
+            <select id="model-select"></select>
+          </div>
+          <div id="model-meta" class="model-meta">Loading Chutes models...</div>
+          <button class="ghost-btn compact" id="settings-btn" type="button">Settings</button>
+        </header>
+
+        <section class="status-card" id="status-card" hidden>
+          <div>
+            <strong id="status-title"></strong>
+            <p id="status-body"></p>
+          </div>
+          <button class="icon-btn" id="status-close" type="button" aria-label="Dismiss">×</button>
+        </section>
+
+        <section class="chat-area" id="chat-area" aria-live="polite">
+          <div class="empty-state" id="empty-state">
+            <div class="hero-mark">C</div>
+            <h2>Ask a Chutes-hosted model anything.</h2>
+            <p>Choose an agent, add your Chutes key or use the Netlify environment key, and start chatting. Every browser keeps its own saved chat history locally.</p>
+            <div class="prompt-grid">
+              <button class="prompt-card" type="button" data-prompt="Compare the top Chutes models for reasoning, coding, and price.">Compare Chutes models</button>
+              <button class="prompt-card" type="button" data-prompt="Draft a deployment checklist for a Netlify app using serverless API functions.">Deployment checklist</button>
+              <button class="prompt-card" type="button" data-prompt="Help me design a product roadmap for an AI chat web app.">Product roadmap</button>
+              <button class="prompt-card" type="button" data-prompt="Explain how OpenAI-compatible chat APIs work in simple terms.">Explain APIs</button>
+            </div>
+          </div>
+          <div id="message-list" class="message-list"></div>
+        </section>
+
+        <form class="composer" id="composer">
+          <textarea id="prompt-input" rows="1" placeholder="Message Chutes Chat..." autocomplete="off"></textarea>
+          <button class="primary-btn send-btn" id="send-btn" type="submit">Send</button>
+        </form>
+      </main>
+
+      <dialog class="settings-modal" id="settings-modal">
+        <form method="dialog" class="settings-card">
+          <div class="settings-head">
+            <div>
+              <h2>Settings</h2>
+              <p>Configure Chutes access and generation controls.</p>
+            </div>
+            <button class="icon-btn" value="close" type="submit">×</button>
+          </div>
+
+          <label class="field">
+            <span>Chutes API key fallback</span>
+            <input id="api-key-input" type="password" placeholder="cpk_..." autocomplete="off" />
+            <small>Recommended for public deployments: set CHUTES_API_KEY in Netlify instead. This local key is only stored in this browser.</small>
+          </label>
+
+          <label class="field">
+            <span>System prompt</span>
+            <textarea id="system-prompt-input" rows="4" placeholder="You are a helpful assistant."></textarea>
+          </label>
+
+          <div class="settings-grid">
+            <label class="field">
+              <span>Temperature</span>
+              <input id="temperature-input" type="number" min="0" max="2" step="0.1" />
+            </label>
+            <label class="field">
+              <span>Max tokens</span>
+              <input id="max-tokens-input" type="number" min="1" max="65536" step="1" />
+            </label>
+          </div>
+
+          <div class="settings-grid">
+            <label class="field checkbox-row">
+              <input id="compact-mode-input" type="checkbox" />
+              <span>Compact messages</span>
+            </label>
+            <label class="field checkbox-row">
+              <input id="show-scores-input" type="checkbox" />
+              <span>Show model power scores</span>
+            </label>
+          </div>
+
+          <menu class="settings-actions">
+            <button class="ghost-btn" id="forget-key-btn" type="button">Forget key</button>
+            <button class="primary-btn" id="save-settings-btn" value="close" type="submit">Save settings</button>
+          </menu>
+        </form>
+      </dialog>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
