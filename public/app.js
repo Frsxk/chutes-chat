@@ -430,15 +430,25 @@ async function submitPrompt(prompt) {
       })
     });
 
-    const data = await response.json().catch(() => ({}));
+    const contentType = response.headers.get("content-type") || "";
     if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
       throw new Error(data.error || data.detail || `Request failed with ${response.status}`);
     }
 
-    assistantMessage.pending = false;
-    assistantMessage.content = data.message?.content || "";
-    assistantMessage.usage = data.usage || null;
-    assistantMessage.finish_reason = data.finish_reason || null;
+    if (contentType.includes("text/event-stream")) {
+      assistantMessage.pending = false;
+      assistantMessage.content = "";
+      renderAll();
+      await readChutesStream(response, assistantMessage);
+      assistantMessage.finish_reason = assistantMessage.finish_reason || "stop";
+    } else {
+      const data = await response.json().catch(() => ({}));
+      assistantMessage.pending = false;
+      assistantMessage.content = data.message?.content || "";
+      assistantMessage.usage = data.usage || null;
+      assistantMessage.finish_reason = data.finish_reason || null;
+    }
   } catch (error) {
     assistantMessage.pending = false;
     assistantMessage.error = true;
@@ -453,6 +463,67 @@ async function submitPrompt(prompt) {
     els.sendBtn.disabled = false;
     saveState();
     renderAll();
+  }
+}
+
+async function readChutesStream(response, assistantMessage) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Streaming response was empty.");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    for (const event of events) {
+      const lines = event.split("\n").map((line) => line.trim()).filter(Boolean);
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+
+        let chunk;
+        try {
+          chunk = JSON.parse(data);
+        } catch {
+          continue;
+        }
+
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta?.content || choice?.message?.content || "";
+        if (delta) {
+          assistantMessage.content += delta;
+          renderAll();
+        }
+        if (choice?.finish_reason) assistantMessage.finish_reason = choice.finish_reason;
+        if (chunk.usage) assistantMessage.usage = chunk.usage;
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    for (const line of buffer.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const chunk = JSON.parse(data);
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta?.content || choice?.message?.content || "";
+        if (delta) assistantMessage.content += delta;
+        if (choice?.finish_reason) assistantMessage.finish_reason = choice.finish_reason;
+        if (chunk.usage) assistantMessage.usage = chunk.usage;
+      } catch {
+        // Ignore incomplete trailing SSE fragments.
+      }
+    }
   }
 }
 
