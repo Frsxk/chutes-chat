@@ -32,6 +32,11 @@ function cleanNumber(value, fallback, min, max) {
   return Math.min(max, Math.max(min, number));
 }
 
+function cleanReasoningEffort(value) {
+  const effort = String(value || "medium").toLowerCase();
+  return ["low", "medium", "high"].includes(effort) ? effort : "medium";
+}
+
 function getHeaderObject(request) {
   const headers = {};
   request.headers.forEach((value, key) => {
@@ -39,6 +44,15 @@ function getHeaderObject(request) {
     headers[key.toLowerCase()] = value;
   });
   return headers;
+}
+
+async function callChutes(apiKey, body, signal) {
+  return fetch(`${CHUTES_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: headersForChutes(apiKey),
+    body: JSON.stringify(body),
+    signal
+  });
 }
 
 export default async function handler(request) {
@@ -75,17 +89,29 @@ export default async function handler(request) {
     stream: true
   };
 
+  if (payload.request_reasoning) {
+    const reasoningEffort = cleanReasoningEffort(payload.reasoning_effort);
+    requestBody.reasoning_effort = reasoningEffort;
+    requestBody.chat_template_kwargs = {
+      enable_thinking: true,
+      thinking: true,
+      reasoning_effort: reasoningEffort
+    };
+  }
+
   const controller = new AbortController();
   const firstByteTimeout = setTimeout(() => controller.abort(), 28000);
 
   let upstream;
   try {
-    upstream = await fetch(`${CHUTES_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: headersForChutes(apiKey),
-      body: JSON.stringify(requestBody),
-      signal: controller.signal
-    });
+    upstream = await callChutes(apiKey, requestBody, controller.signal);
+
+    if (!upstream.ok && payload.request_reasoning && [400, 404, 422].includes(upstream.status)) {
+      const retryBody = { ...requestBody };
+      delete retryBody.reasoning_effort;
+      delete retryBody.chat_template_kwargs;
+      upstream = await callChutes(apiKey, retryBody, controller.signal);
+    }
   } catch (error) {
     clearTimeout(firstByteTimeout);
     const timedOut = error?.name === "AbortError";

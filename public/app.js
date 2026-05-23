@@ -36,7 +36,10 @@ const defaults = {
     temperature: 0.7,
     maxTokens: 2048,
     compactMode: false,
-    showScores: false
+    showScores: false,
+    showReasoning: true,
+    requestReasoning: false,
+    reasoningEffort: "medium"
   }
 };
 
@@ -68,6 +71,9 @@ const els = {
   maxTokensInput: document.querySelector("#max-tokens-input"),
   compactModeInput: document.querySelector("#compact-mode-input"),
   showScoresInput: document.querySelector("#show-scores-input"),
+  showReasoningInput: document.querySelector("#show-reasoning-input"),
+  requestReasoningInput: document.querySelector("#request-reasoning-input"),
+  reasoningEffortInput: document.querySelector("#reasoning-effort-input"),
   forgetKeyBtn: document.querySelector("#forget-key-btn"),
   saveSettingsBtn: document.querySelector("#save-settings-btn")
 };
@@ -334,10 +340,17 @@ function renderMessages() {
     const bubble = document.createElement("div");
     bubble.className = `bubble${message.error ? " error" : ""}`;
 
-    if (message.pending) {
+    if (message.pending && !message.content && !message.reasoning) {
       bubble.innerHTML = '<span class="thinking"><span></span><span></span><span></span> Thinking</span>';
     } else {
-      bubble.innerHTML = renderMarkdownLite(message.content || "");
+      const { content, reasoning } = splitThinkBlocks(message.content || "");
+      const reasoningText = [message.reasoning, reasoning].filter(Boolean).join("\n\n").trim();
+
+      if (message.role === "assistant" && reasoningText && state.settings.showReasoning) {
+        bubble.append(renderReasoningDetails(reasoningText));
+      }
+
+      bubble.append(renderMarkdownElement(content || (message.pending ? "Thinking..." : "")));
     }
 
     wrapper.append(avatar, bubble);
@@ -426,7 +439,9 @@ async function submitPrompt(prompt) {
         model: state.settings.model,
         messages,
         temperature: state.settings.temperature,
-        max_tokens: state.settings.maxTokens
+        max_tokens: state.settings.maxTokens,
+        request_reasoning: Boolean(state.settings.requestReasoning),
+        reasoning_effort: state.settings.reasoningEffort || "medium"
       })
     });
 
@@ -446,6 +461,14 @@ async function submitPrompt(prompt) {
       const data = await response.json().catch(() => ({}));
       assistantMessage.pending = false;
       assistantMessage.content = data.message?.content || "";
+      assistantMessage.reasoning = normalizeTextValue(
+        data.message?.reasoning_content ??
+        data.message?.reasoning ??
+        data.message?.thinking ??
+        data.reasoning_content ??
+        data.reasoning ??
+        ""
+      );
       assistantMessage.usage = data.usage || null;
       assistantMessage.finish_reason = data.finish_reason || null;
     }
@@ -495,14 +518,7 @@ async function readChutesStream(response, assistantMessage) {
           continue;
         }
 
-        const choice = chunk.choices?.[0];
-        const delta = choice?.delta?.content || choice?.message?.content || "";
-        if (delta) {
-          assistantMessage.content += delta;
-          renderAll();
-        }
-        if (choice?.finish_reason) assistantMessage.finish_reason = choice.finish_reason;
-        if (chunk.usage) assistantMessage.usage = chunk.usage;
+        applyStreamChoice(chunk, assistantMessage);
       }
     }
   }
@@ -515,16 +531,77 @@ async function readChutesStream(response, assistantMessage) {
       if (!data || data === "[DONE]") continue;
       try {
         const chunk = JSON.parse(data);
-        const choice = chunk.choices?.[0];
-        const delta = choice?.delta?.content || choice?.message?.content || "";
-        if (delta) assistantMessage.content += delta;
-        if (choice?.finish_reason) assistantMessage.finish_reason = choice.finish_reason;
-        if (chunk.usage) assistantMessage.usage = chunk.usage;
+        applyStreamChoice(chunk, assistantMessage);
       } catch {
         // Ignore incomplete trailing SSE fragments.
       }
     }
   }
+}
+
+
+function applyStreamChoice(chunk, assistantMessage) {
+  const choice = chunk.choices?.[0];
+  if (!choice) return;
+
+  const reasoningDelta = extractReasoningDelta(choice);
+  const contentDelta = extractContentDelta(choice);
+
+  if (reasoningDelta) {
+    assistantMessage.reasoning = `${assistantMessage.reasoning || ""}${reasoningDelta}`;
+  }
+
+  if (contentDelta) {
+    assistantMessage.content += contentDelta;
+  }
+
+  if (choice.finish_reason) assistantMessage.finish_reason = choice.finish_reason;
+  if (chunk.usage) assistantMessage.usage = chunk.usage;
+
+  if (reasoningDelta || contentDelta) renderAll();
+}
+
+function extractContentDelta(choice) {
+  const delta = choice.delta || {};
+  const message = choice.message || {};
+  return normalizeTextValue(delta.content ?? message.content ?? "");
+}
+
+function extractReasoningDelta(choice) {
+  const delta = choice.delta || {};
+  const message = choice.message || {};
+  const values = [
+    delta.reasoning_content,
+    delta.reasoning,
+    delta.thinking,
+    delta.thought,
+    delta.reasoning_text,
+    message.reasoning_content,
+    message.reasoning,
+    message.thinking,
+    message.thought,
+    message.reasoning_text
+  ];
+  return values.map(normalizeTextValue).filter(Boolean).join("");
+}
+
+function normalizeTextValue(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(normalizeTextValue).join("");
+  if (typeof value === "object") {
+    return normalizeTextValue(
+      value.text ??
+      value.content ??
+      value.reasoning_content ??
+      value.reasoning ??
+      value.thinking ??
+      value.thought ??
+      value.summary ??
+      ""
+    );
+  }
+  return String(value);
 }
 
 function buildRequestMessages(thread, pendingAssistantId) {
@@ -534,7 +611,10 @@ function buildRequestMessages(thread, pendingAssistantId) {
 
   thread.messages
     .filter((message) => message.id !== pendingAssistantId && !message.pending && !message.error)
-    .forEach((message) => messages.push({ role: message.role, content: message.content }));
+    .forEach((message) => {
+      const content = message.role === "assistant" ? splitThinkBlocks(message.content || "").content.trim() : message.content;
+      if (content) messages.push({ role: message.role, content });
+    });
 
   return messages;
 }
@@ -546,6 +626,9 @@ function openSettings() {
   els.maxTokensInput.value = state.settings.maxTokens;
   els.compactModeInput.checked = Boolean(state.settings.compactMode);
   els.showScoresInput.checked = Boolean(state.settings.showScores);
+  els.showReasoningInput.checked = Boolean(state.settings.showReasoning);
+  els.requestReasoningInput.checked = Boolean(state.settings.requestReasoning);
+  els.reasoningEffortInput.value = state.settings.reasoningEffort || "medium";
   els.settingsModal.showModal();
 }
 
@@ -556,6 +639,9 @@ function saveSettingsFromForm() {
   state.settings.maxTokens = Math.round(clamp(Number(els.maxTokensInput.value), 1, 65536, defaults.settings.maxTokens));
   state.settings.compactMode = els.compactModeInput.checked;
   state.settings.showScores = els.showScoresInput.checked;
+  state.settings.showReasoning = els.showReasoningInput.checked;
+  state.settings.requestReasoning = els.requestReasoningInput.checked;
+  state.settings.reasoningEffort = els.reasoningEffortInput.value || "medium";
   saveState();
   applyMode();
   populateModels(models, "cached");
@@ -627,6 +713,43 @@ function showStatus(title, body) {
   els.statusCard.hidden = false;
 }
 
+function renderReasoningDetails(text) {
+  const details = document.createElement("details");
+  details.className = "reasoning-box";
+
+  const summary = document.createElement("summary");
+  summary.textContent = "View model reasoning";
+
+  const body = document.createElement("div");
+  body.className = "reasoning-content markdown-body";
+  body.innerHTML = renderMarkdown(text);
+
+  details.append(summary, body);
+  return details;
+}
+
+function renderMarkdownElement(text) {
+  const element = document.createElement("div");
+  element.className = "markdown-body";
+  element.innerHTML = renderMarkdown(text);
+  return element;
+}
+
+function renderMarkdown(text) {
+  if (window.marked?.parse && window.DOMPurify?.sanitize) {
+    const raw = window.marked.parse(String(text || ""), {
+      gfm: true,
+      breaks: true,
+      mangle: false,
+      headerIds: false
+    });
+    return window.DOMPurify.sanitize(raw, {
+      USE_PROFILES: { html: true }
+    });
+  }
+  return renderMarkdownLite(text);
+}
+
 function renderMarkdownLite(text) {
   const escaped = escapeHtml(text);
   const parts = escaped.split(/```/g);
@@ -639,10 +762,49 @@ function renderMarkdownLite(text) {
       return part
         .replace(/`([^`]+)`/g, "<code>$1</code>")
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
         .replace(/\n/g, "<br>");
     })
     .join("");
 }
+
+function splitThinkBlocks(text) {
+  const source = String(text || "");
+  const lower = source.toLowerCase();
+  let content = "";
+  let reasoning = "";
+  let index = 0;
+
+  while (index < source.length) {
+    const thinkStart = lower.indexOf("<think>", index);
+    const thinkingStart = lower.indexOf("<thinking>", index);
+    const candidates = [
+      { start: thinkStart, open: "<think>", close: "</think>" },
+      { start: thinkingStart, open: "<thinking>", close: "</thinking>" }
+    ].filter((candidate) => candidate.start !== -1).sort((a, b) => a.start - b.start);
+
+    const next = candidates[0];
+    if (!next) {
+      content += source.slice(index);
+      break;
+    }
+
+    content += source.slice(index, next.start);
+    const reasoningStart = next.start + next.open.length;
+    const close = lower.indexOf(next.close, reasoningStart);
+
+    if (close === -1) {
+      reasoning += source.slice(reasoningStart);
+      break;
+    }
+
+    reasoning += source.slice(reasoningStart, close);
+    index = close + next.close.length;
+  }
+
+  return { content: content.trim(), reasoning: reasoning.trim() };
+}
+
 
 function escapeHtml(value) {
   return String(value)

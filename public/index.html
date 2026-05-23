@@ -6,6 +6,8 @@
     <meta name="description" content="A ChatGPT-like web app powered by the Chutes OpenAI-compatible API." />
     <title>Chutes Chat</title>
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" defer></script>
   </head>
   <body>
     <div id="app" class="app-shell">
@@ -115,6 +117,27 @@
               <span>Show model power scores</span>
             </label>
           </div>
+
+          <div class="settings-grid">
+            <label class="field checkbox-row">
+              <input id="show-reasoning-input" type="checkbox" />
+              <span>Show model reasoning panel</span>
+            </label>
+            <label class="field checkbox-row">
+              <input id="request-reasoning-input" type="checkbox" />
+              <span>Request thinking when supported</span>
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Reasoning effort hint</span>
+            <select id="reasoning-effort-input">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+            <small>The app can display provider-returned reasoning_content/reasoning fields and &lt;think&gt; blocks. Some Chutes models may not expose reasoning text.</small>
+          </label>
 
           <menu class="settings-actions">
             <button class="ghost-btn" id="forget-key-btn" type="button">Forget key</button>

@@ -76,3 +76,10 @@ Chats are saved with browser `localStorage`, so every visitor keeps their own co
 ## Notes on the agent selector
 
 The selector only uses Chutes-compatible chat models. On startup it calls `/api/models`, which proxies to Chutes' live `/models` endpoint. If the live request fails, it uses the bundled Chutes fallback list. The ranking is transparent but approximate: model families such as GLM 5, Kimi K2, Qwen 3 large variants, DeepSeek R1/V3, and large coder models are weighted above smaller instruct models.
+
+
+### Markdown and reasoning output
+
+Assistant messages are rendered with `marked` plus `DOMPurify` in the browser, with a small escaped fallback if those CDN scripts do not load. The app captures provider-returned reasoning fields such as `reasoning_content`, `reasoning`, `thinking`, and common `<think>...</think>` blocks and shows them in a collapsible “View model reasoning” panel when the setting is enabled.
+
+Reasoning visibility depends on the selected Chutes model and serving stack. Some models expose `reasoning_content` in streaming chunks, some place thinking in `<think>` tags, and some only return the final answer. The optional “Request thinking when supported” setting sends common OpenAI/vLLM/SGLang hints and automatically retries without those hints if Chutes rejects them.

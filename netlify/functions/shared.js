@@ -67,12 +67,10 @@ function getApiKey(headers = {}) {
 }
 
 function headersForChutes(apiKey) {
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-    headers["X-API-Key"] = apiKey;
-  }
-  return headers;
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json"
+  };
 }
 
 function inferParamsFromId(id = "") {
