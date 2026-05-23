@@ -46,6 +46,11 @@ button {
   cursor: pointer;
 }
 
+.toast[hidden],
+.toast:not(.show) {
+  display: none;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;

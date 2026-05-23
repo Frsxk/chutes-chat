@@ -91,6 +91,32 @@ function boot() {
   refreshModels();
 }
 
+function showToast(message, type = "info") {
+  const toast = document.getElementById("toast");
+  const toastText = document.getElementById("toastText");
+
+  if (!toast || !toastText) return;
+
+  if (!message || !String(message).trim()) {
+    toast.classList.remove("show");
+    toast.setAttribute("hidden", "");
+    toastText.textContent = "";
+    return;
+  }
+
+  toastText.textContent = message;
+  toast.dataset.type = type;
+  toast.removeAttribute("hidden");
+  toast.classList.add("show");
+
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => {
+    toast.classList.remove("show");
+    toast.setAttribute("hidden", "");
+    toastText.textContent = "";
+  }, 4500);
+}
+
 function bindEvents() {
   els.newChatBtn.addEventListener("click", () => {
     createThread(true);
